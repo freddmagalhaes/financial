@@ -23,6 +23,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
+    }).catch(() => {
+      setUser(null);
+      setLoading(false);
     });
 
     // Ouve quaisquer alterações no estado de autenticação (login, logoff)
