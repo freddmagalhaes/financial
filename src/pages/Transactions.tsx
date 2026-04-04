@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Filter, Search, X, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Filter, Search, X, Edit2, Trash2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, CheckCircle2, Circle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
+const ptBRMonths = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
+const availableYears = Array.from({ length: 15 }, (_, i) => 2024 + i);
+
 const Transactions: React.FC = () => {
   const { user } = useAuth();
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [transactions, setTransactions] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -20,12 +27,23 @@ const Transactions: React.FC = () => {
   const [type, setType] = useState('expense');
   const [date, setDate] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [isPaid, setIsPaid] = useState(true);
 
   const fetchTransactions = async () => {
     if (!user) return;
+
+    // Filtro por mês
+    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    // Ajuste seguro de string YYYY-MM-DD
+    const startStr = firstDay.getFullYear() + '-' + String(firstDay.getMonth() + 1).padStart(2, '0') + '-01';
+    const endStr = lastDay.getFullYear() + '-' + String(lastDay.getMonth() + 1).padStart(2, '0') + '-' + String(lastDay.getDate()).padStart(2, '0');
+
     const { data, error } = await supabase
       .from('transactions')
       .select('*, categories(*)')
+      .gte('date', startStr)
+      .lte('date', endStr)
       .order('date', { ascending: false });
       
     if (!error && data) {
@@ -44,8 +62,27 @@ const Transactions: React.FC = () => {
 
   useEffect(() => {
     fetchTransactions();
+  }, [user, currentDate]);
+
+  useEffect(() => {
     fetchCategories();
   }, [user]);
+
+  const handlePrevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0);
+  const totalExpense = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + Number(t.amount), 0);
+  const balance = totalIncome - totalExpense;
+
+  const paidIncome = transactions.filter(t => t.type === 'income' && t.is_paid !== false).reduce((acc, t) => acc + Number(t.amount), 0);
+  const paidExpense = transactions.filter(t => t.type === 'expense' && t.is_paid !== false).reduce((acc, t) => acc + Number(t.amount), 0);
+  const paidBalance = paidIncome - paidExpense;
 
   const handleOpenAdd = () => {
     setEditingTransaction(null);
@@ -54,6 +91,7 @@ const Transactions: React.FC = () => {
     setType('expense');
     setDate(new Date().toISOString().split('T')[0]); // Hoje
     setCategoryId('');
+    setIsPaid(true);
     setIsModalOpen(true);
   };
 
@@ -64,7 +102,21 @@ const Transactions: React.FC = () => {
     setType(tx.type);
     setDate(tx.date);
     setCategoryId(tx.category_id || '');
+    setIsPaid(tx.is_paid !== false);
     setIsModalOpen(true);
+  };
+
+  const handleTogglePaid = async (tx: any) => {
+    const newStatus = tx.is_paid === false ? true : false;
+    
+    // Atualização Otimista
+    setTransactions(transactions.map(t => t.id === tx.id ? { ...t, is_paid: newStatus } : t));
+
+    const { error } = await supabase.from('transactions').update({ is_paid: newStatus }).eq('id', tx.id);
+    if (error) {
+      alert('Erro ao atualizar status: ' + error.message);
+      fetchTransactions(); // Revert
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -88,6 +140,7 @@ const Transactions: React.FC = () => {
       type,
       date,
       category_id: categoryId || null,
+      is_paid: isPaid,
     };
 
     if (editingTransaction) {
@@ -116,19 +169,90 @@ const Transactions: React.FC = () => {
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Transações</h1>
-          <p className="text-gray-500 dark:text-gray-400">Gerencie e visualize suas receitas e despesas detalhadas.</p>
+          <p className="text-gray-500 dark:text-gray-400">Gerencie suas receitas e despesas.</p>
         </div>
+        
+        {/* Month Selector */}
+        <div className="flex items-center justify-between md:justify-center bg-white dark:bg-gray-800 rounded-xl p-1 border border-gray-100 dark:border-gray-700 shadow-sm w-full md:w-auto">
+          <button onClick={handlePrevMonth} className="p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+            <ChevronLeft size={20} />
+          </button>
+          
+          <div className="flex items-center mx-2 space-x-1">
+            <select
+              value={currentDate.getMonth()}
+              onChange={(e) => setCurrentDate(new Date(currentDate.getFullYear(), Number(e.target.value), 1))}
+              className="text-sm font-semibold bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded px-1 py-0.5 appearance-none text-center text-center-last"
+            >
+              {ptBRMonths.map((m, i) => (
+                <option key={i} value={i} className="bg-white dark:bg-gray-800">{m}</option>
+              ))}
+            </select>
+            <select
+              value={currentDate.getFullYear()}
+              onChange={(e) => setCurrentDate(new Date(Number(e.target.value), currentDate.getMonth(), 1))}
+              className="text-sm font-semibold bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded px-1 py-0.5 appearance-none text-center text-center-last"
+            >
+              {availableYears.map(y => (
+                <option key={y} value={y} className="bg-white dark:bg-gray-800">{y}</option>
+              ))}
+            </select>
+          </div>
+
+          <button onClick={handleNextMonth} className="p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+            <ChevronRight size={20} />
+          </button>
+        </div>
+
         <button 
           onClick={handleOpenAdd}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-sm"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-sm shrink-0"
         >
           <Plus size={18} />
-          <span>Nova Transação</span>
+          <span className="md:inline">Nova Transação</span>
         </button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
+          <div className={"p-3 rounded-xl " + (balance >= 0 ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400")}>
+            <Wallet size={24} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Saldo Projetado</p>
+            <p className={"text-2xl font-bold " + (balance >= 0 ? "text-gray-900 dark:text-white" : "text-red-600 dark:text-red-400")}>
+              R$ {balance.toFixed(2)}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Efetivado: R$ {paidBalance.toFixed(2)}</p>
+          </div>
+        </div>
+        
+        <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-xl">
+            <TrendingUp size={24} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Receitas Previstas</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">R$ {totalIncome.toFixed(2)}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Recebido: R$ {paidIncome.toFixed(2)}</p>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl">
+            <TrendingDown size={24} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Despesas Previstas</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">R$ {totalExpense.toFixed(2)}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Pago: R$ {paidExpense.toFixed(2)}</p>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -155,6 +279,7 @@ const Transactions: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 text-sm">
+                <th className="px-6 py-4 font-medium w-12 text-center">Situação</th>
                 <th className="px-6 py-4 font-medium">Descrição</th>
                 <th className="px-6 py-4 font-medium">Categoria</th>
                 <th className="px-6 py-4 font-medium">Data</th>
@@ -172,7 +297,20 @@ const Transactions: React.FC = () => {
               )}
               {filteredTransactions.map((tx) => (
                 <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
-                  <td className="px-6 py-4 font-medium">{tx.description}</td>
+                  <td className="px-6 py-4 text-center">
+                    <button 
+                      onClick={() => handleTogglePaid(tx)} 
+                      title={tx.is_paid !== false ? "Marcar como pendente" : "Marcar como pago"}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition duration-200"
+                    >
+                      {tx.is_paid !== false ? (
+                        <CheckCircle2 className="text-green-500" size={22} />
+                      ) : (
+                        <Circle className="text-gray-300 dark:text-gray-600 hover:text-gray-400" size={22} />
+                      )}
+                    </button>
+                  </td>
+                  <td className={"px-6 py-4 font-medium " + (tx.is_paid === false ? "text-gray-500 dark:text-gray-400" : "")}>{tx.description}</td>
                   <td className="px-6 py-4">
                     {tx.categories ? (
                       <span 
@@ -309,6 +447,23 @@ const Transactions: React.FC = () => {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-100 dark:border-gray-700">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={isPaid}
+                    onChange={(e) => setIsPaid(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                </label>
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {isPaid ? (type === 'income' ? 'Já recebi' : 'Já paguei') : (type === 'income' ? 'Ainda não recebi' : 'Ainda não paguei')}
+                  </p>
+                </div>
               </div>
 
               <div className="pt-4 flex gap-3">

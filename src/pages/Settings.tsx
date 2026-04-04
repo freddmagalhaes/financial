@@ -60,29 +60,15 @@ const ProfileTab: React.FC<{ user: SupabaseUser | null }> = ({ user }) => {
   );
 };
 
-const PRESET_CATEGORIES = [
-  { group: 'Moradia', icon: '🏠', color: '#3b82f6', type: 'expense', items: ['Aluguel', 'Financiamento', 'Condomínio', 'Energia elétrica', 'Água', 'Internet', 'Gás'] },
-  { group: 'Alimentação', icon: '🍔', color: '#f59e0b', type: 'expense', items: ['Supermercado', 'Restaurantes', 'Delivery', 'Cafés/Lanches'] },
-  { group: 'Transporte', icon: '🚗', color: '#10b981', type: 'expense', items: ['Combustível', 'Transporte público', 'Uber/Taxi', 'Manutenção de veículo', 'Estacionamento'] },
-  { group: 'Saúde', icon: '🏥', color: '#ef4444', type: 'expense', items: ['Plano de saúde', 'Consultas médicas', 'Exames', 'Farmácia'] },
-  { group: 'Educação', icon: '🎓', color: '#8b5cf6', type: 'expense', items: ['Faculdade', 'Cursos online', 'Livros', 'Assinaturas educacionais'] },
-  { group: 'Compras', icon: '🛍️', color: '#ec4899', type: 'expense', items: ['Roupas', 'Eletrônicos', 'Casa e decoração', 'Compras diversas'] },
-  { group: 'Lazer & Entret.', icon: '🎮', color: '#f43f5e', type: 'expense', items: ['Cinema', 'Viagens', 'Jogos', 'Streaming', 'Eventos'] },
-  { group: 'Assinaturas', icon: '📱', color: '#06b6d4', type: 'expense', items: ['Streaming', 'Apps pagos', 'Softwares', 'Clubes'] },
-  { group: 'Finanças', icon: '💳', color: '#64748b', type: 'expense', items: ['Cartão de crédito', 'Empréstimos', 'Juros', 'Tarifas bancárias'] },
-  { group: 'Outros', icon: '🎁', color: '#9ca3af', type: 'expense', items: ['Presentes', 'Doações', 'Imprevistos'] },
-  
-  { group: 'Renda Principal', icon: '💼', color: '#10b981', type: 'income', items: ['Salário', 'Pró-labore'] },
-  { group: 'Renda Extra', icon: '🧑‍💻', color: '#3b82f6', type: 'income', items: ['Freelance', 'Bicos', 'Consultorias'] },
-  { group: 'Investimentos', icon: '📊', color: '#8b5cf6', type: 'income', items: ['Dividendos', 'Juros', 'Venda de ativos'] },
-  { group: 'Outras Receitas', icon: '💸', color: '#f59e0b', type: 'income', items: ['Reembolsos', 'Prêmios', 'Vendas diversas'] },
-];
+const EMOJIS = ['🏠', '🍔', '🚗', '🏥', '🎓', '🛍️', '🎮', '📱', '💳', '🎁', '💼', '🧑‍💻', '📊', '💸', '✈️', '🐶', '🐱', '☕', '🍺', '💪', '🎬', '🎵', '⚽', '💡', '💧', '🔥', '👕', '👠', '💄', '📚', '🛠️', '💍'];
 
 const CategoriesTab: React.FC<{ user: SupabaseUser | null }> = ({ user }) => {
   const [categories, setCategories] = useState<any[]>([]);
   const [name, setName] = useState('');
   const [color, setColor] = useState('#3b82f6');
   const [type, setType] = useState('expense');
+  const [selectedEmoji, setSelectedEmoji] = useState('🏠');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const fetchCategories = async () => {
@@ -99,7 +85,10 @@ const CategoriesTab: React.FC<{ user: SupabaseUser | null }> = ({ user }) => {
     e.preventDefault();
     if (!user || !name) return;
     setLoading(true);
-    const { data, error } = await supabase.from('categories').insert([{ user_id: user.id, name, color, type }]).select();
+    
+    // Junta o emoji com o nome, ex: "🏠 Aluguel"
+    const fullName = `${selectedEmoji} ${name.trim()}`;
+    const { data, error } = await supabase.from('categories').insert([{ user_id: user.id, name: fullName, color, type }]).select();
 
     if (error) alert('Erro: ' + error.message);
     else if (data) {
@@ -115,23 +104,7 @@ const CategoriesTab: React.FC<{ user: SupabaseUser | null }> = ({ user }) => {
     else setCategories(categories.filter(c => c.id !== id));
   };
 
-  const handleLoadPresets = async () => {
-    if (!user) return;
-    setLoading(true);
-    const toInsert = PRESET_CATEGORIES.flatMap(g => 
-      g.items.map(item => ({
-        user_id: user.id,
-        name: g.icon + " " + item,
-        color: g.color,
-        type: g.type
-      }))
-    );
-    
-    const { data, error } = await supabase.from('categories').insert(toInsert).select();
-    if (error) alert('Erro ao carregar presets: ' + error.message);
-    else if (data) setCategories([...categories, ...data]);
-    setLoading(false);
-  };
+
 
   // Sort categories alphabetically so emojis naturally group them
   const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name));
@@ -140,41 +113,63 @@ const CategoriesTab: React.FC<{ user: SupabaseUser | null }> = ({ user }) => {
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8 animate-in fade-in duration-300">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Suas Categorias</h2>
-        {categories.length === 0 && (
-          <button 
-            onClick={handleLoadPresets} disabled={loading}
-            className="text-sm px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-medium shadow-sm transition-all disabled:opacity-50"
-          >
-            Carregar Categorias Recomendadas ✨
-          </button>
-        )}
       </div>
       
-      <form onSubmit={handleAddCategory} className="flex gap-4 mb-8 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex-wrap">
-        <div className="flex-1 min-w-[200px]">
+      <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row gap-4 mb-8 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex-wrap relative">
+        <div className="flex gap-2 min-w-[200px] flex-1">
+          {/* Emoji Picker */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className="w-10 h-10 flex items-center justify-center border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-lg text-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+            >
+              {selectedEmoji}
+            </button>
+            {showEmojiPicker && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowEmojiPicker(false)}></div>
+                <div className="absolute top-12 left-0 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3 w-[260px] max-h-60 overflow-y-auto grid grid-cols-6 gap-2">
+                  {EMOJIS.map(e => (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => { setSelectedEmoji(e); setShowEmojiPicker(false); }}
+                      className="h-8 w-8 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-xl"
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          
           <input 
-            type="text" required placeholder="Nova Categoria (Ex: 🐶 Pets)" value={name} onChange={(e) => setName(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+            type="text" required placeholder="Nome (Ex: Aluguel)" value={name} onChange={(e) => setName(e.target.value)}
+            className="flex-1 px-4 py-2 h-10 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-        <div className="w-16">
-          <input 
-            type="color" value={color} onChange={(e) => setColor(e.target.value)}
-            className="w-full h-10 rounded-lg cursor-pointer border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
-          />
+        <div className="flex gap-4">
+          <div className="w-16">
+            <input 
+              type="color" value={color} onChange={(e) => setColor(e.target.value)}
+              className="w-full h-10 rounded-lg cursor-pointer border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+            />
+          </div>
+          <div className="flex-1 sm:w-32">
+            <select 
+              value={type} onChange={(e) => setType(e.target.value)}
+              className="w-full h-10 px-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="expense">Despesa</option>
+              <option value="income">Receita</option>
+            </select>
+          </div>
+          <button disabled={loading} type="submit" className="px-4 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center shrink-0">
+            <Plus size={20} />
+          </button>
         </div>
-        <div className="w-32">
-          <select 
-            value={type} onChange={(e) => setType(e.target.value)}
-            className="w-full h-10 px-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="expense">Despesa</option>
-            <option value="income">Receita</option>
-          </select>
-        </div>
-        <button disabled={loading} type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center">
-          <Plus size={20} />
-        </button>
       </form>
 
       <div className="space-y-3">

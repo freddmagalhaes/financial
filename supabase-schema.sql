@@ -19,6 +19,7 @@ CREATE TABLE public.transactions (
     type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
     category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
     date DATE NOT NULL,
+    is_paid BOOLEAN DEFAULT true NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
