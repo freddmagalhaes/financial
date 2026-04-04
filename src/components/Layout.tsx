@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { LayoutDashboard, Receipt, Settings as SettingsIcon, LogOut, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Receipt, Settings as SettingsIcon, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 
 const Layout: React.FC = () => {
   const { signOut } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
@@ -14,19 +15,42 @@ const Layout: React.FC = () => {
     { name: 'Configurações', path: '/settings', icon: <SettingsIcon size={20} /> },
   ];
 
+  const handleCloseMenu = () => {
+    setIsMobileMenuOpen(false);
+  };
+
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors overflow-hidden">
+      
+      {/* Mobile Overlay Background */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity" 
+          onClick={handleCloseMenu}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 hidden md:flex md:flex-col">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400">Finanças</h2>
+      <aside 
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400">Finova</h2>
+          <button 
+            onClick={handleCloseMenu}
+            className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+          >
+            <X size={20} />
+          </button>
         </div>
         
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           {navItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
+              onClick={handleCloseMenu}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-medium ${
                   isActive
@@ -53,12 +77,20 @@ const Layout: React.FC = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden w-full">
         {/* Top Header */}
-        <header className="h-16 flex items-center justify-between px-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 md:justify-end">
-          <div className="md:hidden flex items-center">
-            <h2 className="text-xl font-bold text-blue-600 dark:text-blue-400">Finanças</h2>
+        <header className="h-16 flex items-center justify-between px-4 md:px-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 md:justify-end shrink-0">
+          <div className="md:hidden flex items-center gap-3">
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
+              aria-label="Open Menu"
+            >
+              <Menu size={24} />
+            </button>
+            <h2 className="text-xl font-bold text-blue-600 dark:text-blue-400">Finova</h2>
           </div>
+          
           <button
             onClick={toggleDarkMode}
             className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400"
@@ -69,8 +101,8 @@ const Layout: React.FC = () => {
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 p-6 md:p-8 overflow-auto">
-          <div className="max-w-6xl mx-auto">
+        <div className="flex-1 p-4 md:p-8 overflow-auto">
+          <div className="max-w-6xl mx-auto pb-20 md:pb-0">
             <Outlet />
           </div>
         </div>
