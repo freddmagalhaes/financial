@@ -11,6 +11,7 @@
   - **Gráfico de Donut por Categoria**: Visualização colorida que respeita as "hashtags" de cores das próprias categorias definidas por cada usuário.
 - **Transações Dinâmicas (Módulo CRUD)**: Aba completa ("Transações") com busca inteligente via digitação (instant search), inserção, edição paramétrica e exclusão de receitas/despesas conectadas nativamente à tabela de 'Categorias'.
 - **Gerenciador de Categorias Personalizadas ("Settings")**: Aba de Configurações contendo "Catálogo Padrão", capaz de injetar dezenas de categorias comuns automaticamente com base em grupos + Emojis (🏠 Moradia, 🍔 Alimentação). Você também pode criar, colorir e deletá-las.
+- **Notificações Inteligentes**: Alerta visual dinâmico com sininho integrado para avisar, com exatos 2 dias de antecedência, sobre o vencimento de contas e despesas registradas. Preferências baseadas via Supabase `user_metadata` e status de leitura por `localStorage`.
 - **Modo Claro / Escuro (Light/Dark Mode)**: Sistema contextual que herda a preferência do Sistema Operacional, e permite alteração manual. Inclui gravação de preferência de perfil diretamente no `localStorage` do navegador para acessos futuros.
 - **📱 Híbrido Nativo (Android via Capacitor)**: A infraestrutura possuí wrapper oficial da engine do Google compilada `(android/)`, possibilitando exportar o mesmo código-fonte em React diretamente para o Android Studio e gerar APKs instaláveis perfeitamente responsivos em celulares Android.
 

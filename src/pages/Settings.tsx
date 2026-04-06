@@ -193,24 +193,60 @@ const CategoriesTab: React.FC<{ user: SupabaseUser | null }> = ({ user }) => {
   );
 };
 
-const NotificationsTab: React.FC = () => {
+const NotificationsTab: React.FC<{ user: SupabaseUser | null }> = ({ user }) => {
+  const [notifyDueDates, setNotifyDueDates] = useState(
+    user?.user_metadata?.notify_due_dates ?? true
+  );
+  const [saving, setSaving] = useState(false);
+
+  const handleToggleNotify = async () => {
+    const newValue = !notifyDueDates;
+    setNotifyDueDates(newValue);
+    setSaving(true);
+    
+    const { error } = await supabase.auth.updateUser({
+      data: { notify_due_dates: newValue }
+    });
+    
+    if (error) {
+      alert('Erro ao salvar preferência: ' + error.message);
+      setNotifyDueDates(!newValue); // rollback
+    }
+    setSaving(false);
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8 animate-in fade-in duration-300">
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">Preferências de Notificação</h2>
       
       <div className="space-y-4">
+        {/* Adicionado o novo controle funcional */}
+        <div className="flex items-center justify-between p-4 border border-gray-100 dark:border-gray-700 rounded-xl relative">
+          <div>
+            <p className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+              Lançamentos Vencendo
+              {saving && <span className="text-xs text-blue-500 animate-pulse">(Salvando...)</span>}
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Avisos no sistema 2 dias antes do vencimento do débito.</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" className="sr-only peer" checked={notifyDueDates} onChange={handleToggleNotify} disabled={saving} />
+            <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600 ${saving ? 'opacity-50' : ''}`}></div>
+          </label>
+        </div>
+
+        {/* Mockups remanescentes que existiam antes */}
         {[
           { title: "Resumo Semanal", desc: "Receba relatórios detalhados toda segunda-feira" },
-          { title: "Vencimento de Faturas", desc: "Avisos 2 dias antes do vencimento do limite do orçamento" },
           { title: "Alertas de Metas", desc: "Notificação ao atingir 50% e 100% da sua meta" }
         ].map((item, i) => (
-          <div key={i} className="flex items-center justify-between p-4 border border-gray-100 dark:border-gray-700 rounded-xl">
+          <div key={i} className="flex items-center justify-between p-4 border border-gray-100 dark:border-gray-700 rounded-xl opacity-60">
             <div>
               <p className="font-medium text-gray-900 dark:text-white">{item.title}</p>
               <p className="text-sm text-gray-500 dark:text-gray-400">{item.desc}</p>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" defaultChecked={i !== 1} />
+            <label className="relative inline-flex items-center cursor-not-allowed">
+              <input type="checkbox" className="sr-only peer" disabled defaultChecked={false} />
               <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
             </label>
           </div>
@@ -307,7 +343,7 @@ const Settings: React.FC = () => {
         <div className="md:col-span-3 min-h-[400px]">
           {activeTab === 'profile' && <ProfileTab user={user} />}
           {activeTab === 'categories' && <CategoriesTab user={user} />}
-          {activeTab === 'notifications' && <NotificationsTab />}
+          {activeTab === 'notifications' && <NotificationsTab user={user} />}
           {activeTab === 'security' && <SecurityTab />}
         </div>
       </div>
