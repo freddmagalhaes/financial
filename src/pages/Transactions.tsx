@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Filter, Search, X, Edit2, Trash2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, CheckCircle2, Circle } from 'lucide-react';
+import { Plus, Filter, Search, X, Edit2, Trash2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, CheckCircle2, Circle, Copy } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -83,6 +83,52 @@ const Transactions: React.FC = () => {
   const paidIncome = transactions.filter(t => t.type === 'income' && t.is_paid !== false).reduce((acc, t) => acc + Number(t.amount), 0);
   const paidExpense = transactions.filter(t => t.type === 'expense' && t.is_paid !== false).reduce((acc, t) => acc + Number(t.amount), 0);
   const paidBalance = paidIncome - paidExpense;
+  
+  // Saldo que resta após pagamento: Saldo Efetivo (que já tem) - Contas a Pagar
+  const pendingExpense = totalExpense - paidExpense;
+  const nextBalance = paidIncome - totalExpense; // Saldo atual assumindo que vai pagar as despesas pendentes
+
+  const handleDuplicateToNextMonth = async () => {
+    if (!transactions.length) {
+      alert('Nenhuma transação neste mês para copiar.');
+      return;
+    }
+    
+    const nextMonthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+    const nextMonthStr = ptBRMonths[nextMonthDate.getMonth()] + ' de ' + nextMonthDate.getFullYear();
+    
+    if (!confirm(`Deseja copiar as ${transactions.length} transações para ${nextMonthStr}?\n\nTodas as informações serão duplicadas, mas as faturas ficarão como "Pendentes" (não pagas), para que você possa alterar os valores no próximo mês se necessário.`)) {
+      return;
+    }
+
+    setLoading(true);
+
+    const payload = transactions.map(tx => {
+      const originalDate = new Date(tx.date + 'T12:00:00');
+      originalDate.setMonth(originalDate.getMonth() + 1);
+      
+      return {
+        user_id: tx.user_id,
+        description: tx.description,
+        amount: tx.amount, // Preserva o valor, o usuário pode editar depois
+        type: tx.type,
+        date: originalDate.toISOString().split('T')[0],
+        category_id: tx.category_id,
+        is_paid: false // Zera o pagamento para editar e pagar no novo mês
+      };
+    });
+
+    const { error } = await supabase.from('transactions').insert(payload);
+    
+    if (error) {
+      alert('Erro ao copiar transações: ' + error.message);
+    } else {
+      setTimeout(() => alert('Transações copiadas com sucesso! Avançando para ' + nextMonthStr + '.'), 100);
+      handleNextMonth(); // move the view to the next month!
+    }
+    setLoading(false);
+  };
+
 
   const handleOpenAdd = () => {
     setEditingTransaction(null);
@@ -208,49 +254,80 @@ const Transactions: React.FC = () => {
           </button>
         </div>
 
-        <button 
-          onClick={handleOpenAdd}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-sm shrink-0"
-        >
-          <Plus size={18} />
-          <span className="md:inline">Nova Transação</span>
-        </button>
+        <div className="flex gap-2 w-full md:w-auto mt-4 md:mt-0">
+          <button 
+            onClick={handleDuplicateToNextMonth}
+            disabled={loading || transactions.length === 0}
+            title="Copiar estas transações para o próximo mês"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium rounded-xl transition-colors shadow-sm shrink-0 disabled:opacity-50"
+          >
+            <Copy size={18} />
+            <span className="hidden md:inline">Clonar p/ Novo Mês</span>
+          </button>
+          <button 
+            onClick={handleOpenAdd}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-sm shrink-0"
+          >
+            <Plus size={18} />
+            <span className="hidden md:inline">Nova Transação</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* Card Saldo Atual (Efetivado) */}
         <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
-          <div className={"p-3 rounded-xl " + (balance >= 0 ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400")}>
+          <div className={"p-3 rounded-xl " + (paidBalance >= 0 ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400")}>
             <Wallet size={24} />
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Saldo Projetado</p>
-            <p className={"text-2xl font-bold " + (balance >= 0 ? "text-gray-900 dark:text-white" : "text-red-600 dark:text-red-400")}>
-              R$ {balance.toFixed(2)}
+          <div className="flex-1">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Saldo Atual da Conta</p>
+            <p className={"text-2xl font-bold " + (paidBalance >= 0 ? "text-gray-900 dark:text-white" : "text-red-600 dark:text-red-400")}>
+              R$ {paidBalance.toFixed(2)}
             </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Efetivado: R$ {paidBalance.toFixed(2)}</p>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">Saldo efetivado (já recebido/pago)</p>
+          </div>
+        </div>
+
+        {/* Card Restante (Para Pagamento) */}
+        <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
+          <div className={"p-3 rounded-xl " + (nextBalance >= 0 ? "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400" : "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400")}>
+            <Wallet size={24} />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Resta Pós-Pagamentos</p>
+            <p className={"text-2xl font-bold " + (nextBalance >= 0 ? "text-gray-900 dark:text-white" : "text-orange-600 dark:text-orange-400")}>
+              R$ {nextBalance.toFixed(2)}
+            </p>
+            <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
+              Faltam pagar: R$ {pendingExpense.toFixed(2)}
+            </p>
           </div>
         </div>
         
+        {/* Card Receitas */}
         <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-xl">
             <TrendingUp size={24} />
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Receitas Previstas</p>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Receitas Totais</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white">R$ {totalIncome.toFixed(2)}</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Recebido: R$ {paidIncome.toFixed(2)}</p>
+            <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">Recebido real: R$ {paidIncome.toFixed(2)}</p>
           </div>
         </div>
 
+        {/* Card Despesas */}
         <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl">
             <TrendingDown size={24} />
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Despesas Previstas</p>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Despesas Totais</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white">R$ {totalExpense.toFixed(2)}</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Pago: R$ {paidExpense.toFixed(2)}</p>
+            <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">Pago real: R$ {paidExpense.toFixed(2)}</p>
           </div>
         </div>
       </div>
