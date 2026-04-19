@@ -29,6 +29,11 @@ const Transactions: React.FC = () => {
   const [categoryId, setCategoryId] = useState('');
   const [isPaid, setIsPaid] = useState(true);
 
+  // Installment State
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [installmentsCount, setInstallmentsCount] = useState(2);
+  const [installmentSuffix, setInstallmentSuffix] = useState('');
+
   const fetchTransactions = async () => {
     if (!user) return;
 
@@ -138,6 +143,9 @@ const Transactions: React.FC = () => {
     setDate(new Date().toISOString().split('T')[0]); // Hoje
     setCategoryId('');
     setIsPaid(true);
+    setIsInstallment(false);
+    setInstallmentsCount(2);
+    setInstallmentSuffix('');
     setIsModalOpen(true);
   };
 
@@ -149,6 +157,17 @@ const Transactions: React.FC = () => {
     setDate(tx.date);
     setCategoryId(tx.category_id || '');
     setIsPaid(tx.is_paid !== false);
+    
+    // Check if it's an installment
+    const match = tx.description.match(/\s*\(\d+\/\d+\)$/);
+    if (match) {
+      setDescription(tx.description.replace(match[0], ''));
+      setInstallmentSuffix(match[0].trim());
+    } else {
+      setInstallmentSuffix('');
+    }
+    
+    setIsInstallment(false); // Cannot create installments from edit
     setIsModalOpen(true);
   };
 
@@ -177,11 +196,13 @@ const Transactions: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    setLoading(true);
-    
+    const finalDescription = editingTransaction && installmentSuffix 
+      ? `${description.trim()} ${installmentSuffix}` 
+      : description.trim();
+
     const payload = {
       user_id: user.id,
-      description,
+      description: finalDescription,
       amount: parseFloat(amount),
       type,
       date,
@@ -198,12 +219,38 @@ const Transactions: React.FC = () => {
       if (error) alert('Erro ao atualizar: ' + error.message);
       else fetchTransactions();
     } else {
-      const { error } = await supabase
-        .from('transactions')
-        .insert([payload]);
+      if (isInstallment && type === 'expense') {
+        const payloads = [];
+        const baseDate = new Date(date + 'T12:00:00');
+        
+        for (let i = 1; i <= installmentsCount; i++) {
+          const instDate = new Date(baseDate);
+          instDate.setMonth(baseDate.getMonth() + (i - 1));
+          
+          payloads.push({
+            user_id: user.id,
+            description: `${description.trim()} (${i}/${installmentsCount})`,
+            amount: parseFloat(amount),
+            type,
+            date: instDate.toISOString().split('T')[0],
+            category_id: categoryId || null,
+            // Primeira parcela respeita o status do formulário, as futuras nascem pendentes
+            is_paid: i === 1 ? isPaid : false,
+          });
+        }
+        
+        const { error } = await supabase.from('transactions').insert(payloads);
+        if (error) alert('Erro ao criar parcelamento: ' + error.message);
+        else fetchTransactions();
 
-      if (error) alert('Erro ao criar transação: ' + error.message);
-      else fetchTransactions();
+      } else {
+        const { error } = await supabase
+          .from('transactions')
+          .insert([payload]);
+
+        if (error) alert('Erro ao criar transação: ' + error.message);
+        else fetchTransactions();
+      }
     }
     
     setIsModalOpen(false);
@@ -387,7 +434,34 @@ const Transactions: React.FC = () => {
                       )}
                     </button>
                   </td>
-                  <td className={"px-6 py-4 font-medium " + (tx.is_paid === false ? "text-gray-500 dark:text-gray-400" : "")}>{tx.description}</td>
+                  <td className={"px-6 py-4 " + (tx.is_paid === false ? "text-gray-500 dark:text-gray-400" : "")}>
+                    {(() => {
+                      const match = tx.description.match(/\s*\((\d+)\/(\d+)\)$/);
+                      if (match) {
+                        const currentInst = parseInt(match[1]);
+                        const totalInst = parseInt(match[2]);
+                        const remaining = totalInst - currentInst;
+                        
+                        const txDate = new Date(tx.date + 'T12:00:00');
+                        const finalDate = new Date(txDate);
+                        finalDate.setMonth(txDate.getMonth() + remaining);
+                        const finalDateStr = finalDate.toLocaleDateString('pt-BR');
+                        
+                        const cleanDesc = tx.description.replace(match[0], '');
+                        
+                        return (
+                          <div className="flex flex-col">
+                            <span className="font-medium">{cleanDesc}</span>
+                            <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
+                              Parcela {currentInst}/{totalInst}
+                              {remaining > 0 ? ` (Restam ${remaining} até ${finalDateStr})` : ' (Última parcela)'}
+                            </span>
+                          </div>
+                        );
+                      }
+                      return <span className="font-medium">{tx.description}</span>;
+                    })()}
+                  </td>
                   <td className="px-6 py-4">
                     {tx.categories ? (
                       <span 
@@ -481,7 +555,7 @@ const Transactions: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Valor (R$)
+                    {isInstallment ? 'Valor de cada parcela (R$)' : 'Valor (R$)'}
                   </label>
                   <input
                     type="number"
@@ -525,6 +599,47 @@ const Transactions: React.FC = () => {
                   ))}
                 </select>
               </div>
+
+              {!editingTransaction && type === 'expense' && (
+                <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer" 
+                        checked={isInstallment}
+                        onChange={(e) => setIsInstallment(e.target.checked)}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-300">
+                      Compra Parcelada?
+                    </p>
+                  </div>
+                  
+                  {isInstallment && (
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-4">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">
+                          Número de Parcelas
+                        </label>
+                        <input
+                          type="number"
+                          min="2"
+                          max="360"
+                          required={isInstallment}
+                          value={installmentsCount}
+                          onChange={(e) => setInstallmentsCount(parseInt(e.target.value) || 2)}
+                          className="w-full px-3 py-1.5 border border-blue-200 dark:border-blue-800 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 dark:text-white outline-none transition-colors text-sm"
+                        />
+                      </div>
+                      <div className="flex-[2] text-xs text-blue-600 dark:text-blue-400">
+                        O sistema criará {installmentsCount} lançamentos automáticos de <strong className="font-bold">R$ {parseFloat(amount || '0').toFixed(2)}</strong> mês a mês a partir de {new Date(date + 'T12:00:00').toLocaleDateString('pt-BR')}.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-100 dark:border-gray-700">
                 <label className="relative inline-flex items-center cursor-pointer">
